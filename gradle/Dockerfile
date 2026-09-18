@@ -5,7 +5,7 @@
 # If you perform a manual update, make sure to update the tag as well.
 # Including the tag with the digest is for documentation purposes, as Docker ignores the tag when a digest is provided
 # It is useful because mapping tags to digests is challenging without OCI metadata, and many images do not provide this metadata.
-FROM docker.io/gradle:9.7.1-jdk21-ubi@sha256:c4836e38b80ecfc77a3a1a68c39ff69b3ea71416a648669407560d465810877b AS gradle
+FROM docker.io/gradle:9.7.1-jdk21-ubi@sha256:a61b27a408a28fa6dbafddd19a60c87cf81d86157db9554e9efd3dc1c3369ad2 AS gradle
 
 FROM ghcr.io/dependabot/dependabot-updater-core
 

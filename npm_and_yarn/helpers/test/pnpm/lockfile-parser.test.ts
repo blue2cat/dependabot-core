@@ -134,4 +134,53 @@ describe("generates an updated pnpm lock for the original file", () => {
 
     expect(result.length).toEqual(9);
   });
+
+  // pnpm writes the experimental `lockfile.format: v13` as tab-indented JSON
+  // with one `packages` entry per version and no `snapshots` section. An
+  // importer dependency whose specifier is an exact version is written as
+  // the specifier alone.
+  it("that is written in the v13 lockfile format", async () => {
+    copyDependencies("lockfile_v13", tempDir);
+    const result = await parseLockfile(tempDir);
+
+    expect(result).toEqual([
+      {
+        name: "debug",
+        version: "4.3.4",
+        resolved: undefined,
+        dev: false,
+        specifiers: ["4.3.4"],
+        aliased: false,
+      },
+      {
+        name: "etag",
+        version: "1.8.0",
+        resolved: undefined,
+        dev: false,
+        specifiers: ["^1.0.0"],
+        aliased: false,
+      },
+      {
+        name: "ms",
+        version: "2.1.2",
+        resolved: undefined,
+        dev: false,
+        specifiers: [],
+        aliased: false,
+      },
+    ]);
+  });
+
+  it("that is written in the v13 lockfile format with CRLF line endings", async () => {
+    copyDependencies("lockfile_v13", tempDir, (content) =>
+      content.replace(/\n/g, "\r\n")
+    );
+    const result = await parseLockfile(tempDir);
+
+    expect(result.map(({ name, version }) => `${name}@${version}`)).toEqual([
+      "debug@4.3.4",
+      "etag@1.8.0",
+      "ms@2.1.2",
+    ]);
+  });
 });

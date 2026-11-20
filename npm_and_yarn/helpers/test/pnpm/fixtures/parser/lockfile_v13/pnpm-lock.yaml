@@ -1,0 +1,36 @@
+{
+	"lockfileVersion": "13.0",
+	"projects": {
+		".": {
+			"dependencies": {
+				"etag": {
+					"specifier": "^1.0.0",
+					"version": "1.8.0",
+				},
+			},
+			"devDependencies": {
+				"debug": "4.3.4",
+			},
+		},
+	},
+	"packages": {
+		"debug@4.3.4": {
+			"integrity": "sha512-PRWFHuSU3eDtQJPvnNY7Jcket1j0t5OuOsFzPPzsekD52Zl8qUfFIPEiswXqIvHWGVHOgX+7G/vCNNhehwxfkQ==",
+			"engines": {
+				"node": ">=6.0",
+			},
+			"dependencies": {
+				"ms": "2.1.2",
+			},
+		},
+		"etag@1.8.0": {
+			"integrity": "sha512-cNpO3IDp+dpOoM+0nNZYJc3ztKz+t6jLuX2Xs87qsFIrlgAqm83zPHtgrbxIREdky8mNTB2o2gIYqx9155CQlA==",
+			"engines": {
+				"node": ">= 0.6",
+			},
+		},
+		"ms@2.1.2": {
+			"integrity": "sha512-sGkPx+VjMtmA6MX27oA4FBFELFCZZ4S4XqeGOXCv68tT+jb3vk/RyaKWP0PTKyWtmLSM0b+adUTEvbs1PEaH2w==",
+		},
+	},
+}

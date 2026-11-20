@@ -14,12 +14,44 @@ import {
   type ProjectSnapshot,
 } from "@pnpm/lockfile-file";
 import * as dependencyPath from "@pnpm/dependency-path";
-import { readFile, mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { readLockfile as readLockfileWithPnpm } from "@pnpm/napi";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-const YAML_DOCUMENT_START = "---\n";
 const YAML_DOCUMENT_SEPARATOR = "\n---\n";
+
+// The lockfile majors pnpm's own engine reads. Older lockfiles (5.4, 6.x) are
+// only readable by @pnpm/lockfile-file.
+const PNPM_ENGINE_LOCKFILE_MAJORS = new Set([9, 12, 13]);
+
+interface ParsedLockfile {
+  importers: Record<string, ProjectSnapshot>;
+  packages?: Record<string, PackageSnapshot>;
+  catalogs?: CatalogSnapshots;
+}
+
+interface ImporterDependency {
+  specifier: string;
+  version: string;
+}
+
+type ImporterDependencies = Record<string, ImporterDependency>;
+
+interface LockfileFileImporter {
+  dependencies?: ImporterDependencies;
+  devDependencies?: ImporterDependencies;
+  optionalDependencies?: ImporterDependencies;
+  [key: string]: unknown;
+}
+
+// The shape @pnpm/napi's readLockfile returns: pnpm-lock.yaml's v9 sections,
+// whatever format the file is written in.
+interface LockfileFile {
+  importers?: Record<string, LockfileFileImporter>;
+  packages?: Record<string, Record<string, unknown>>;
+  snapshots?: Record<string, Record<string, unknown>>;
+  catalogs?: CatalogSnapshots;
+}
 
 interface PnpmDependency {
   name: string;
@@ -52,33 +84,89 @@ export async function parse(directory: string): Promise<PnpmDependency[]> {
     );
 }
 
-async function readLockfile(directory: string) {
+async function readLockfile(
+  directory: string
+): Promise<ParsedLockfile | null> {
   const content = await readLockfileContent(directory);
-  // pnpm 11 can prepend an environment lockfile before the project lockfile.
-  const mainDocument = content === null ? null : extractMainDocument(content);
-
-  if (mainDocument === null) {
-    return readWantedLockfile(directory, {
-      ignoreIncompatible: true,
-    });
+  if (content === null) {
+    return null;
   }
 
-  const tempDirectory = await mkdtemp(
-    path.join(os.tmpdir(), "dependabot-pnpm-lockfile-")
-  );
-
-  try {
-    await writeFile(
-      path.join(tempDirectory, "pnpm-lock.yaml"),
-      mainDocument,
-      "utf8"
-    );
-    return await readWantedLockfile(tempDirectory, {
-      ignoreIncompatible: true,
-    });
-  } finally {
-    await rm(tempDirectory, { recursive: true, force: true });
+  const major = lockfileMajor(content);
+  if (major !== null && !PNPM_ENGINE_LOCKFILE_MAJORS.has(major)) {
+    return readWantedLockfile(directory, { ignoreIncompatible: true });
   }
+
+  // pnpm's engine splits off a leading environment lockfile document and
+  // converts the v13 format to the v9 sections itself.
+  const lockfile = (await readLockfileWithPnpm({
+    dir: directory,
+  })) as LockfileFile | null;
+
+  return lockfile === null ? null : toParsedLockfile(lockfile);
+}
+
+function lockfileMajor(content: string): number | null {
+  const normalized = content.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
+  const documents = normalized.split(YAML_DOCUMENT_SEPARATOR);
+  const mainDocument = documents[documents.length - 1];
+
+  // The v13 format is written as JSON, which is also valid YAML.
+  const match = mainDocument.trimStart().startsWith("{")
+    ? mainDocument.match(/"lockfileVersion"\s*:\s*"?(\d+)/)
+    : mainDocument.match(/^["']?lockfileVersion["']?\s*:\s*["']?(\d+)/m);
+
+  return match ? Number(match[1]) : null;
+}
+
+// Joins each snapshot with its package metadata and splits importer
+// dependencies into specifiers and versions, as @pnpm/lockfile-file does for
+// the v9 format, so both readers feed the same mapping below.
+function toParsedLockfile(lockfile: LockfileFile): ParsedLockfile {
+  const packages: Record<string, PackageSnapshot> = {};
+  for (const depPath of Object.keys(lockfile.snapshots ?? {}).sort()) {
+    const pkgId = dependencyPath.removeSuffix(depPath);
+    packages[depPath] = {
+      ...lockfile.snapshots?.[depPath],
+      ...lockfile.packages?.[pkgId],
+    } as unknown as PackageSnapshot;
+  }
+
+  const importers: Record<string, ProjectSnapshot> = {};
+  for (const [importerId, importer] of Object.entries(
+    lockfile.importers ?? {}
+  )) {
+    importers[importerId] = toProjectSnapshot(importer);
+  }
+
+  return { importers, packages, catalogs: lockfile.catalogs };
+}
+
+function toProjectSnapshot(importer: LockfileFileImporter): ProjectSnapshot {
+  const specifiers: Record<string, string> = {};
+
+  function versionsOf(dependencies: ImporterDependencies | undefined) {
+    if (dependencies === undefined) {
+      return undefined;
+    }
+
+    const versions: Record<string, string> = {};
+    for (const [name, { specifier, version }] of Object.entries(
+      dependencies
+    )) {
+      specifiers[name] = specifier;
+      versions[name] = version;
+    }
+    return versions;
+  }
+
+  return {
+    ...importer,
+    dependencies: versionsOf(importer.dependencies),
+    devDependencies: versionsOf(importer.devDependencies),
+    optionalDependencies: versionsOf(importer.optionalDependencies),
+    specifiers,
+  } as ProjectSnapshot;
 }
 
 async function readLockfileContent(directory: string): Promise<string | null> {
@@ -91,23 +179,6 @@ async function readLockfileContent(directory: string): Promise<string | null> {
 
     throw error;
   }
-}
-
-function extractMainDocument(content: string): string | null {
-  content = content.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
-  if (!content.startsWith(YAML_DOCUMENT_START)) {
-    return null;
-  }
-
-  const separatorIndex = content.indexOf(
-    YAML_DOCUMENT_SEPARATOR,
-    YAML_DOCUMENT_START.length
-  );
-  if (separatorIndex === -1) {
-    return null;
-  }
-
-  return content.slice(separatorIndex + YAML_DOCUMENT_SEPARATOR.length);
 }
 
 function nameVerDevFromPkgSnapshot(
@@ -187,7 +258,7 @@ function nameVerDevFromPkgSnapshot(
     name: name,
     version: version,
     resolved:
-      "tarball" in pkgSnapshot.resolution
+      pkgSnapshot.resolution && "tarball" in pkgSnapshot.resolution
         ? pkgSnapshot.resolution.tarball
         : undefined,
     dev: "dev" in pkgSnapshot && pkgSnapshot.dev === true,

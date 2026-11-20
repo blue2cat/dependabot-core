@@ -1,4 +1,7 @@
-import { parseLockfile } from "../../lib/pnpm/index.js";
+import {
+  parseLockfile,
+  readLockfileDocument,
+} from "../../lib/pnpm/index.js";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -182,5 +185,54 @@ describe("generates an updated pnpm lock for the original file", () => {
       "etag@1.8.0",
       "ms@2.1.2",
     ]);
+  });
+});
+
+describe("reads the v9 sections of a pnpm lockfile", () => {
+  let tempDir: string;
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(os.tmpdir() + path.sep);
+  });
+  afterEach(() => fs.rm(tempDir, { recursive: true }, () => {}));
+
+  function copyFixture(fixture: string) {
+    fs.copyFileSync(
+      path.join(__dirname, `fixtures/parser/${fixture}/pnpm-lock.yaml`),
+      path.join(tempDir, "pnpm-lock.yaml")
+    );
+  }
+
+  it("of the project document after an environment lockfile document", async () => {
+    copyFixture("multi_document");
+    const document = await readLockfileDocument(tempDir);
+
+    expect(document?.importers?.["."]?.dependencies).toEqual({
+      etag: { specifier: "^1.0.0", version: "1.8.0" },
+    });
+    expect(Object.keys(document?.snapshots ?? {})).toEqual(["etag@1.8.0"]);
+  });
+
+  it("of a lockfile written in the v13 format", async () => {
+    copyFixture("lockfile_v13");
+    const document = await readLockfileDocument(tempDir);
+
+    expect(document?.importers?.["."]?.dependencies).toEqual({
+      etag: { specifier: "^1.0.0", version: "1.8.0" },
+    });
+    expect(document?.importers?.["."]?.devDependencies).toEqual({
+      debug: { specifier: "4.3.4", version: "4.3.4" },
+    });
+    expect(Object.keys(document?.snapshots ?? {}).sort()).toEqual([
+      "debug@4.3.4",
+      "etag@1.8.0",
+      "ms@2.1.2",
+    ]);
+    expect(document?.snapshots?.["debug@4.3.4"]?.dependencies).toEqual({
+      ms: "2.1.2",
+    });
+  });
+
+  it("of no lockfile", async () => {
+    expect(await readLockfileDocument(tempDir)).toBeNull();
   });
 });

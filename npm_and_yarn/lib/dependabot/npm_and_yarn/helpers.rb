@@ -1289,12 +1289,19 @@ module Dependabot
 
       private_class_method :run_single_yarn_command
 
+      # A top-level `lockfileVersion`, as YAML writes it or as the v13 format's JSON
+      # does (a quoted key indented by one tab).
+      PNPM_LOCKFILE_VERSION = /^(?:\uFEFF|\t)?["']?lockfileVersion["']?:[ \t]*["']?(?<version>\d+(?:\.\d+)*)/
+
       sig { params(pnpm_lock: DependencyFile).returns(T.nilable(String)) }
       def self.pnpm_lockfile_version(pnpm_lock)
-        match = T.must(pnpm_lock.content).match(/^lockfileVersion: ['"]?(?<version>[\d.]+)/)
-        return match[:version] if match
+        pnpm_lockfile_version_in(T.must(pnpm_lock.content))
+      end
 
-        nil
+      # The main document's version. pnpm 11+ can write an env document ahead of it.
+      sig { params(content: String).returns(T.nilable(String)) }
+      def self.pnpm_lockfile_version_in(content)
+        T.cast(content.scan(PNPM_LOCKFILE_VERSION).last, T.nilable(T::Array[String]))&.first
       end
 
       sig { params(dependency_set: Dependabot::FileParsers::Base::DependencySet).returns(T::Array[Dependency]) }

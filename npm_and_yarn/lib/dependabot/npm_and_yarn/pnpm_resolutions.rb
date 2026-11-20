@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 require "sorbet-runtime"
-require "yaml"
+require "dependabot/npm_and_yarn/pnpm_lockfile_document"
 
 module Dependabot
   module NpmAndYarn
@@ -29,9 +29,7 @@ module Dependabot
 
       sig { params(content: String).void }
       def initialize(content)
-        # pnpm 11+ can write an env document ahead of the project one.
-        document = YAML.safe_load_stream(content).last
-        @document = T.let(document.is_a?(Hash) ? document : {}, T::Hash[String, Object])
+        @document = T.let(PnpmLockfileDocument.read(content), T::Hash[String, Object])
       end
 
       # `dependent => version` for every edge to `name`.

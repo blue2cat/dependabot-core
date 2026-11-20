@@ -1,8 +1,8 @@
 # typed: strict
 # frozen_string_literal: true
 
-require "yaml"
 require "sorbet-runtime"
+require "dependabot/npm_and_yarn/pnpm_lockfile_document"
 
 module Dependabot
   module NpmAndYarn
@@ -17,11 +17,7 @@ module Dependabot
 
         sig { returns(T::Hash[String, T::Array[String]]) }
         def relationships
-          # pnpm 11+ can write pnpm-lock.yaml as a two-document YAML stream: an
-          # env document (pnpm's own binaries, with its own "packages" and
-          # "snapshots" sections) precedes the project document. The project
-          # graph is always the last document in the stream.
-          parsed = YAML.safe_load_stream(T.must(@lockfile.content)).last || {}
+          parsed = PnpmLockfileDocument.read(T.must(@lockfile.content))
 
           # v9+ uses "snapshots" for resolved dependency details; v6 uses "packages"
           entries = parsed.fetch("snapshots", nil) || parsed.fetch("packages", {})

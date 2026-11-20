@@ -577,6 +577,36 @@ RSpec.describe Dependabot::NpmAndYarn::Helpers do
     end
   end
 
+  describe "::pnpm_lockfile_version_in" do
+    it "reads an unquoted version" do
+      expect(described_class.pnpm_lockfile_version_in("lockfileVersion: 5.4\n")).to eq("5.4")
+    end
+
+    it "reads a quoted version" do
+      expect(described_class.pnpm_lockfile_version_in("lockfileVersion: '9.0'\n")).to eq("9.0")
+    end
+
+    it "reads the version of the v13 format's JSON" do
+      content = "{\n\t\"lockfileVersion\": \"13.0\",\n\t\"projects\": {},\n}\n"
+
+      expect(described_class.pnpm_lockfile_version_in(content)).to eq("13.0")
+    end
+
+    it "reads the main document's version after an env document" do
+      content = "---\nlockfileVersion: '9.0'\n---\n{\n\t\"lockfileVersion\": \"13.0\",\n}\n"
+
+      expect(described_class.pnpm_lockfile_version_in(content)).to eq("13.0")
+    end
+
+    it "reads a version after a byte order mark" do
+      expect(described_class.pnpm_lockfile_version_in("\uFEFFlockfileVersion: '9.0'\n")).to eq("9.0")
+    end
+
+    it "ignores a nested lockfileVersion key" do
+      expect(described_class.pnpm_lockfile_version_in("settings:\n  lockfileVersion: '9.0'\n")).to be_nil
+    end
+  end
+
   describe "::dependencies_with_all_versions_metadata" do
     let(:foo_a) do
       Dependabot::Dependency.new(

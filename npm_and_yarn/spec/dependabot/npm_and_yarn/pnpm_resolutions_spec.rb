@@ -69,6 +69,30 @@ RSpec.describe Dependabot::NpmAndYarn::PnpmResolutions do
     YAML
   end
 
+  # What pnpm's engine reads from v9_lockfile: the project document's sections,
+  # without the env document.
+  let(:v9_document) do
+    {
+      "lockfileVersion" => "9.0",
+      "importers" => {
+        "." => { "devDependencies" => { "react" => { "specifier" => "^18.0.0", "version" => "18.2.0" } } }
+      },
+      "snapshots" => {
+        "a@1.0.0" => { "dependencies" => { "react" => "18.2.0" } },
+        "c@1.0.0" => { "dependencies" => { "react-dom" => "18.2.0(react@18.2.0)" } }
+      }
+    }
+  end
+
+  before do
+    Dependabot::NpmAndYarn::PnpmLockfileDocument.clear_cache
+    allow(Dependabot::SharedHelpers).to receive(:run_helper_subprocess)
+      .with(hash_including(function: "pnpm:readLockfileDocument"))
+      .and_return(v9_document)
+  end
+
+  after { Dependabot::NpmAndYarn::PnpmLockfileDocument.clear_cache }
+
   describe "#edges" do
     it "lists every dependent's resolution in a v6 lockfile" do
       expect(described_class.new(v6_lockfile).edges("react")).to eq(
@@ -107,15 +131,9 @@ RSpec.describe Dependabot::NpmAndYarn::PnpmResolutions do
     end
 
     it "reads the project document of a v9 stream and drops peer suffixes" do
-      lockfile = v9_lockfile + <<~YAML
+      v9_document["packages"] = { "@scope/d@2.0.0" => { "resolution" => { "integrity" => "sha512-d==" } } }
 
-        packages:
-
-          '@scope/d@2.0.0':
-            resolution: {integrity: sha512-d==}
-      YAML
-
-      expect(described_class.new(lockfile).locked_packages).to eq(Set["a@1.0.0", "c@1.0.0", "@scope/d@2.0.0"])
+      expect(described_class.new(v9_lockfile).locked_packages).to eq(Set["a@1.0.0", "c@1.0.0", "@scope/d@2.0.0"])
     end
   end
 end

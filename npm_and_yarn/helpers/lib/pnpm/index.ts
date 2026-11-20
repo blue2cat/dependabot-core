@@ -1,3 +1,6 @@
-import { parse as parseLockfile } from "./lockfile-parser.js";
+import {
+  parse as parseLockfile,
+  readDocument as readLockfileDocument,
+} from "./lockfile-parser.js";
 
-export { parseLockfile };
+export { parseLockfile, readLockfileDocument };

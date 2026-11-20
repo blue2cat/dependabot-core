@@ -30,14 +30,14 @@ interface ParsedLockfile {
   catalogs?: CatalogSnapshots;
 }
 
-interface ImporterDependency {
+export interface ImporterDependency {
   specifier: string;
   version: string;
 }
 
-type ImporterDependencies = Record<string, ImporterDependency>;
+export type ImporterDependencies = Record<string, ImporterDependency>;
 
-interface LockfileFileImporter {
+export interface LockfileFileImporter {
   dependencies?: ImporterDependencies;
   devDependencies?: ImporterDependencies;
   optionalDependencies?: ImporterDependencies;
@@ -46,7 +46,7 @@ interface LockfileFileImporter {
 
 // The shape @pnpm/napi's readLockfile returns: pnpm-lock.yaml's v9 sections,
 // whatever format the file is written in.
-interface LockfileFile {
+export interface LockfileFile {
   importers?: Record<string, LockfileFileImporter>;
   packages?: Record<string, Record<string, unknown>>;
   snapshots?: Record<string, Record<string, unknown>>;
@@ -97,13 +97,17 @@ async function readLockfile(
     return readWantedLockfile(directory, { ignoreIncompatible: true });
   }
 
-  // pnpm's engine splits off a leading environment lockfile document and
-  // converts the v13 format to the v9 sections itself.
-  const lockfile = (await readLockfileWithPnpm({
-    dir: directory,
-  })) as LockfileFile | null;
-
+  const lockfile = await readDocument(directory);
   return lockfile === null ? null : toParsedLockfile(lockfile);
+}
+
+// pnpm-lock.yaml's v9 sections as pnpm's engine reads them. The engine splits
+// off a leading environment lockfile document and converts the v13 format to
+// the v9 sections itself.
+export async function readDocument(
+  directory: string
+): Promise<LockfileFile | null> {
+  return (await readLockfileWithPnpm({ dir: directory })) as LockfileFile | null;
 }
 
 function lockfileMajor(content: string): number | null {

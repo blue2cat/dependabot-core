@@ -8,6 +8,6 @@
       "fetch-factory": "^2.0.1"
     },
     "devDependencies": {
-      "etag" : "^2.0.0"
+      "etag" : "^999.0.0"
     }
 }

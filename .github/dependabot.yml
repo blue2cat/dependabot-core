@@ -157,6 +157,8 @@ updates:
     ignore:
       - dependency-name: "npm"
         update-types: [ "version-update:semver-major" ]
+      # Kept at PNPM_VERSION in npm_and_yarn/Dockerfile, which the image build checks
+      - dependency-name: "@pnpm/napi"
   - package-ecosystem: "pip"
     directory: "/python/helpers"
     schedule:

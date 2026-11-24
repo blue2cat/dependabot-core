@@ -6,6 +6,7 @@ ARG COREPACK_VERSION=0.36.0
 
 # Check for updates at https://github.com/pnpm/pnpm/releases
 # With every major release update, also update npm_and_yarn/lib/dependabot/npm_and_yarn/pnpm_package_manager.rb (Section : Update instructions)
+# Keep `@pnpm/napi` in npm_and_yarn/helpers/package.json at this version. The image build fails if they differ.
 ARG PNPM_VERSION=12.22.0
 
 # Check for updates at https://github.com/yarnpkg/berry/releases
@@ -71,6 +72,10 @@ ENV NPM_CONFIG_AUDIT=false \
 ENV DEPENDABOT_NATIVE_HELPERS_PATH="/opt"
 COPY --chown=dependabot:dependabot npm_and_yarn/helpers /opt/npm_and_yarn/helpers
 RUN bash /opt/npm_and_yarn/helpers/build
+# The native helper reads pnpm-lock.yaml with pnpm's own engine, so it must be the pnpm that writes the lockfile
+RUN napi_version="$(node -p "require('$DEPENDABOT_NATIVE_HELPERS_PATH/npm_and_yarn/node_modules/@pnpm/napi/package.json').version")" \
+  && [ "$napi_version" = "$PNPM_VERSION" ] \
+  || { echo "@pnpm/napi is $napi_version, expected PNPM_VERSION $PNPM_VERSION" >&2; exit 1; }
 
 COPY --chown=dependabot:dependabot --parents npm_and_yarn common $DEPENDABOT_HOME/
 COPY --chown=dependabot:dependabot updater $DEPENDABOT_HOME/dependabot-updater
